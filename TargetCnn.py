@@ -180,7 +180,10 @@ class cnn_class():
             X_adv = tf.clip_by_value(X_adv - eta * G, min_X, max_X)
 
         if self.adv_loss_fn(tf.reshape(X_adv, [1, 1, -1, self.channel_nb]), t, rho)>=0:
-            return tf.reshape(safe_Xadv, (1, 1, self.seg_size, self.channel_nb))
+            if safe_Xadv is None:
+                return tf.reshape(X_adv, (1, 1, self.seg_size, self.channel_nb))
+            else:
+                return tf.reshape(safe_Xadv, (1, 1, self.seg_size, self.channel_nb))
         else:
             return tf.reshape(X_adv, (1, 1, self.seg_size, self.channel_nb))
 
