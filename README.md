@@ -9,7 +9,7 @@ By default, data is stored in `experim_path_{dataset_name}`. Directory can be ch
 
 
 ## Obtain datasets
-- The dataset can be obtained as .zip file from "[The UCR Time Series Classification Repository](http://www.timeseriesclassification.com/dataset.php)", "[The UCI Machine Learning Repository](http://archive.ics.uci.edu/ml/datasets/smartphone-based+recognition+of+human+activities+and+postural+transitions)".
+- The dataset can be obtained as .zip file from "[The UCR Time Series Classification Repository](http://www.timeseriesclassification.com/dataset.php)".
 - Download the .zip file and extract it it in `Dataset/{dataset_name}` directory.
 - Run the following command for pre-processing a given dataset from The UCR Repository. For example, to extract SyntheticControl dataset
 ```
