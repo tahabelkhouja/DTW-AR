@@ -60,7 +60,7 @@ class cnn_class():
                 #Logits layer
                 tf.keras.layers.Dense(self.class_nb)
                 ])
-        if arch=='1':
+        elif arch=='1':
             self.trunk_model = tf.keras.Sequential([
                 #Layers
                 tf.keras.layers.Conv2D(66,[1, 12], padding="same", input_shape=(1, self.seg_size, self.channel_nb)),
@@ -109,13 +109,65 @@ class cnn_class():
                 #Logits layer
                 tf.keras.layers.Dense(self.class_nb)
                 ])
-        self.model = tf.keras.Sequential([self.trunk_model,
-            tf.keras.layers.Softmax()])
+                
+        elif arch=='lstm':
+            self.trunk_model = tf.keras.Sequential([
+                #Layers
+                tf.keras.layers.Reshape((self.seg_size, self.channel_nb)),
+                tf.keras.layers.LSTM(128, activation="relu", return_sequences=True),
+                tf.keras.layers.LSTM(64,  activation="relu", return_sequences=False),
+                #Fully connected layer
+                tf.keras.layers.Flatten(),
+                tf.keras.layers.Dense(512, activation=tf.nn.relu),
+                #Logits layer
+                tf.keras.layers.Dense(self.class_nb)
+                ])
+        elif arch=='transformer':
+            pass
+
+        else:
+            raise NotImplementedError("Architecture Not Implemented")
+
+        if arch=='transformer':
+            self.trunk_model, self.model = self.get_transformer_model(input_shape=(1, self.seg_size, self.channel_nb), class_nb=self.class_nb)
+        else:
+            self.model = tf.keras.Sequential([self.trunk_model,
+                tf.keras.layers.Softmax()])
+
         #Training Functions
         self.loss_fn = tf.keras.losses.SparseCategoricalCrossentropy()
         self.optimizer = tf.keras.optimizers.Adam(1e-3)
 
-                
+
+    def get_transformer_model(self, input_shape, class_nb,# head_size=12, num_heads=48, ff_dim=4, num_transformer_blocks=4, mlp_units=[128], mlp_dropout=0.1, dropout=0.15):
+                                                            head_size=12, num_heads=16, ff_dim=4, num_transformer_blocks=4, mlp_units=[128], mlp_dropout=0.1, dropout=0.15):
+        def transformer_encoder(inputs, head_size, num_heads, ff_dim, dropout=0):
+            # Normalization and Attention
+            x = tf.keras.layers.LayerNormalization()(inputs)
+            x = tf.keras.layers.MultiHeadAttention(key_dim=head_size, num_heads=num_heads, dropout=dropout)(x, x)
+            x = tf.keras.layers.Dropout(dropout)(x)
+            res = x + inputs
+
+            # Feed Forward Part
+            x = tf.keras.layers.LayerNormalization()(res)
+            x = tf.keras.layers.Conv2D(filters=ff_dim, kernel_size=1, activation="relu")(x)
+            x = tf.keras.layers.Dropout(dropout)(x)
+            x = tf.keras.layers.Conv2D(filters=inputs.shape[-1], kernel_size=1)(x)
+            return x + res
+
+        inputs = tf.keras.Input(shape=input_shape)
+        x = inputs
+        for _ in range(num_transformer_blocks):
+            x = transformer_encoder(x, head_size, num_heads, ff_dim, dropout)
+
+        x = tf.keras.layers.GlobalAveragePooling2D(data_format="channels_first")(x)
+        for dim in mlp_units:
+            x = tf.keras.layers.Dense(dim, activation="relu")(x)
+            x = tf.keras.layers.Dropout(mlp_dropout)(x)
+        trunk_outputs = tf.keras.layers.Dense(class_nb)(x)
+        outputs = tf.keras.layers.Softmax()(trunk_outputs)
+
+        return tf.keras.Model(inputs=inputs, outputs=trunk_outputs), tf.keras.Model(inputs=inputs, outputs=outputs)
             
     
     def train(self, train_set, checkpoint_path="model_saved", epochs=100, new_train=False):
@@ -143,7 +195,7 @@ class cnn_class():
                                               tf.reduce_max(Z_logits[t+1:]))-Z_logits[t], rho)
             
 
-    def dtwar_attack(self, X, t, path=None, alpha=0.1, beta=0.1, eta=1e-2, rho=-5, max_iter=1e3, delta_l2_loss=1):
+    def dtwar_attack(self, X, t, path=None, alpha=0.1, beta=0.1, eta=1e-2, rho=-5, max_iter=1e3, delta_l2_loss=1, dtw_path_tightness=10):
         @tf.function
         def dtwar_gradient_step(X_adv, t, path, max_l2_loss, alpha, alpha_l2, rho):
             with tf.GradientTape() as tape:
@@ -164,7 +216,7 @@ class cnn_class():
         X_adv = tf.add(X, noise)
         CT_dtw_mat = np.arange(1,self.seg_size**2+1).reshape((self.seg_size, self.seg_size))
         if path is None:
-            path = path_conversion(dtw_random_path(10, CT_dtw_mat), CT_dtw_mat)
+            path = path_conversion(dtw_random_path(dtw_path_tightness, CT_dtw_mat), CT_dtw_mat)
         min_loss = np.inf
         alpha = tf.convert_to_tensor(alpha, dtype=tf.float64)
         alpha_l2 = tf.convert_to_tensor(-beta, dtype=tf.float64)
@@ -177,6 +229,8 @@ class cnn_class():
             if (target_loss<=rho) and (dist_loss < min_loss):
                 min_loss = dist_loss
                 return tf.reshape(X_adv, (1, 1, self.seg_size, self.channel_nb))
+            if np.any(np.isnan(G)):
+                break
             X_adv = tf.clip_by_value(X_adv - eta * G, min_X, max_X)
 
         if self.adv_loss_fn(tf.reshape(X_adv, [1, 1, -1, self.channel_nb]), t, rho)>=0:

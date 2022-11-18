@@ -1,7 +1,7 @@
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = "3"
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"   
-os.environ["CUDA_VISIBLE_DEVICES"]="0"
+# os.environ["CUDA_VISIBLE_DEVICES"]="0"
 import json
 import argparse
 import copy
@@ -32,7 +32,7 @@ def attack(args):
         os.makedirs(experim_path)
         os.makedirs(os.path.join(experim_path, "TrainingRes"))
 
-    target = cnn_class("WB", SEG_SIZE, CHANNEL_NB, CLASS_NB, arch='2')
+    target = cnn_class(args.model_name, SEG_SIZE, CHANNEL_NB, CLASS_NB, arch=args.model_arch)
     train_ds = tf.data.Dataset.from_tensor_slices((X_train, y_train)).batch(args.epochs)
     existing_models = [mdl for mdl in os.listdir(os.path.join(experim_path, "TrainingRes"))]
     if any([mdl_name.startswith(args.model_name) for mdl_name in existing_models]):
@@ -43,7 +43,7 @@ def attack(args):
     acc = target.score(X_test, y_test)
     print(f"Current model accuracy {acc:.2}")
 
-    attack_file = os.path.join(experim_path, "DTWAR_attack.pkl")
+    attack_file = os.path.join(experim_path, f"DTWAR_{args.save_file}.pkl")
     if os.path.isfile(attack_file):
         X_ind, X_natural, X_adversarial, y_natural, y_adversarial = pkl.load(open(attack_file, 'rb'))
         print("Resuming")
@@ -61,7 +61,7 @@ def attack(args):
         y_adv = np.random.randint(0, CLASS_NB)
         while y_nat==y_adv:
             y_adv = np.random.randint(0, CLASS_NB)
-        X_adv = target.dtwar_attack(X, y_adv, rho=-5, alpha=0.05, beta=0.05, eta=5e-1, delta_l2_loss=1, max_iter=args.iter)
+        X_adv = target.dtwar_attack(X, y_adv, rho=-5, alpha=0.05, beta=0.05, eta=5e-1, delta_l2_loss=1, max_iter=args.iter, dtw_path_tightness=args.dtw_window)
 
         X_natural = np.concatenate([X_natural, X_nat])
         X_adversarial = np.concatenate([X_adversarial, X_adv])
@@ -73,9 +73,12 @@ def attack(args):
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_name', type=str, help="Dataset name", required=True)
-    parser.add_argument('--model_name', type=str, default="WB", help="DNN model name", required=False)
-    parser.add_argument('--epochs', type=int, default=70, help="Number of training epochs", required=False)
+    parser.add_argument('--model_name', type=str, default="BaseModel", help="DNN model name", required=False)
+    parser.add_argument('--model_arch', type=str, default='2', help="DNN model architecture", required=False)
+    parser.add_argument('--epochs', type=int, default=100, help="Number of training epochs", required=False)
     ## DTW-AR hyper-parameters
-    parser.add_argument('--iter', type=int, default=1000, help="Number of maximum iterations per attack", required=False)
+    parser.add_argument('--save_file', type=str, default="Attack", help="File name to save the attack results", required=False)
+    parser.add_argument('--iter', type=int, default=5000, help="Number of maximum iterations per attack", required=False)
+    parser.add_argument('--dtw_window', type=int, default=10, help="Window range for DTW alignment path", required=False)
     args = parser.parse_args()
     attack(args)

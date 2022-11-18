@@ -1,5 +1,7 @@
+tensorflow
 matplotlib
 numpy
-sklearn
+scikit-learn
+scipy
 tqdm
 argparse
