@@ -15,18 +15,16 @@ from tqdm import tqdm
 from TargetCnn import cnn_class
 
 def attack(args):
-    json_param = "datasets_parameters.json"
     dataset_name = args.dataset_name
-    with open(json_param) as jf:
-        info = json.load(jf)
-    info_dict = info[dataset_name]
-    path = info_dict['path']
-    SEG_SIZE = info_dict['SEG_SIZE']
-    CHANNEL_NB = info_dict['CHANNEL_NB']
-    CLASS_NB = info_dict['CLASS_NB']
+    path = os.path.join("Dataset", dataset_name+'.pkl')
+    SEG_SIZE = args.window_size
+    CHANNEL_NB = args.channel_dim
+    CLASS_NB = args.class_nb
 
     print(f"DTW-AR attack algorithm on {args.dataset_name}".format(dataset_name))
     X_train, y_train, X_test, y_test = pkl.load(open(path, 'rb'))
+    assert len(X_train.shape)==4, "Shape must be (N, 1, SEG_SIZE, CHANNEL_NB)"
+    assert len(X_test.shape)==4, "Shape must be (N, 1, SEG_SIZE, CHANNEL_NB)"
     experim_path = os.path.join("Experiments", "Experiment_"+dataset_name)
     if not os.path.isdir(experim_path):
         os.makedirs(experim_path)
@@ -73,6 +71,9 @@ def attack(args):
 if __name__=="__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_name', type=str, help="Dataset name", required=True)
+    parser.add_argument('--window_size', type=int, help='Window size of the input', required=True)
+    parser.add_argument('--channel_dim', type=int, help='Number of channels of the input', required=True)
+    parser.add_argument('--class_nb', type=int, help='Total number of classes', required=True)
     parser.add_argument('--model_name', type=str, default="BaseModel", help="DNN model name", required=False)
     parser.add_argument('--model_arch', type=str, default='2', help="DNN model architecture", required=False)
     parser.add_argument('--epochs', type=int, default=100, help="Number of training epochs", required=False)
